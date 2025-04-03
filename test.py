@@ -1,6 +1,7 @@
 from fasthtml.common import *
 from monsterui.all import *
 import random
+import json
 
 # Using the "slate" theme with Highlight.js enabled
 hdrs = Theme.slate.headers(highlightjs=True)
@@ -21,6 +22,14 @@ trips = [
     {"name": "Cultural Immersion", "price": "$499", "category": "Culture"},
     {"name": "Road Trip", "price": "$299", "category": "Budget"},
     {"name": "Road Trip", "price": "$299", "category": "Awit"},
+    {"name": "Road Trip", "price": "$299", "category": "Test"},
+    {"name": "Road Trip", "price": "$299", "category": "Zebu"},
+    {"name": "Beach Getaway", "price": "$499", "category": "makati"},
+    {"name": "Mountain Hiking", "price": "$599", "category": "manila"},
+    {"name": "City Tour", "price": "$399", "category": "Cavite"},
+    {"name": "Safari Expedition", "price": "$999", "category": "Ilocos"},
+    {"name": "Cruise Trip", "price": "$1299", "category": "Taguig"},
+    {"name": "Skiing Adventure", "price": "$799", "category": "Winter Sports"},
 ]
 
 CATEGORIES = sorted(set(t["category"] for t in trips))
@@ -37,16 +46,32 @@ def TripCard(t, img_id=1):
         Button("Details", cls=(ButtonT.primary, "w-full"))
     )
 
+
 ################################
-### Navigation ###
+### Reusable NavBar Function ###
 ################################
 
-scrollspy_links = (
-    A("Explore", href="/"),
-    A("Booking", href="/booking"),
-    A("Profile", href="/profile"),
-    Button("Logout",    cls=ButtonT.destructive)
-)
+def reusable_navbar():
+    """Reusable NavBar component"""
+    scrollspy_links = (
+        A("Explore", href="/"),
+        A("Booking", href="/booking"),
+        A("Profile", href="/profile"),
+        Button("Logout", cls=ButtonT.destructive)
+    )
+    
+    return NavBar(
+        *scrollspy_links,
+        brand=DivLAligned(H3("Trip Explorer"), 
+                          Img(src='assets/logo.png', alt='Coinsumer Logo', cls='logo-img', height=70, width=70)),
+        sticky=True, uk_scrollspy_nav=True,
+        scrollspy_cls=ScrollspyT.bold
+    )
+
+
+################################
+### Category Tabs Function ###
+################################
 
 def category_tabs(active_category):
     return TabContainer(
@@ -65,7 +90,7 @@ def category_tabs(active_category):
 
 
 ################################
-### Simplified Pagination Controls ###
+### Pagination Controls ###
 ################################
 
 def pagination_controls(page, total_pages, category):
@@ -79,35 +104,52 @@ def pagination_controls(page, total_pages, category):
         )
     )
 
+
 ################################
 ### Explore Page ###
 ################################
 
+@rt("/search")
+def search(query: str = ""):
+    """ Handle Search Query """
+    filtered_trips = [t for t in trips if query.lower() in t["name"].lower()]
+    
+    return Div(
+        *[TripCard(t, img_id=i) for i, t in enumerate(filtered_trips)],
+        cls="uk-grid-match"
+    )
+
+
 @rt
-def index(page: int = 1, category: str = ""):
-    """ Explore Page with Pagination """
-    filtered_trips = [t for t in trips if category == "" or t["category"] == category]
+def index(page: int = 1, category: str = "", query: str = ""):
+    """ Explore Page with Pagination and Search """
+    filtered_trips = [t for t in trips if (category == "" or t["category"] == category) and query.lower() in t["name"].lower()]
     total_pages = (len(filtered_trips) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
     start_idx = (page - 1) * ITEMS_PER_PAGE
     end_idx = start_idx + ITEMS_PER_PAGE
     paginated_trips = filtered_trips[start_idx:end_idx]
 
     return Container(
-        NavBar(
-            *scrollspy_links,
-            brand=DivLAligned(H3("Trip Explorer"), UkIcon('map', height=30, width=30)),
-            sticky=True, uk_scrollspy_nav=True,
-            scrollspy_cls=ScrollspyT.bold
-        ),
+        reusable_navbar(),  # Reusable NavBar
         Container(
             DivCentered(
-                H1("Discover Amazing Trips!"), 
-                Subtitle("Explore various trips with pagination."), 
+                H1("Discover Amazing Trips!"),
+                A(Input(
+                    placeholder="Search...",
+                    cls="w-3/4 p-2 rounded-lg h-8 border border-gray-300 text-base", 
+                    id="search-input",
+                    name="query",  
+                    hx_get="/search",  
+                    hx_target="#trips-section",  
+                    hx_trigger="input changed delay:300ms",  
+                    hx_include="[name='query']",  
+                    value=query  
+                )),
                 id="welcome-section"
             ),
-            category_tabs(category),
+            Div(category_tabs(category), cls="w-full flex justify-center items-center mb-6"),
             Section(
-                H2(f"Trips in {category}" if category else "All Trips"),  # Dynamic title based on category
+                H2(f"Trips in {category}" if category else "All Trips", cls="text-center text-4xl font-extrabold text-gray-900 bg-gradient-to-r from-[#FF5733] to-[#FFC0CB] text-white py-4 px-8 rounded-xl shadow-lg tracking-wide mb-6"),
                 Grid(*[TripCard(t, img_id=i) for i, t in enumerate(paginated_trips)], cols_lg=2),
                 pagination_controls(page, total_pages, category),
                 id="trips-section"
@@ -116,34 +158,38 @@ def index(page: int = 1, category: str = ""):
         )
     )
 
+
 ################################
 ### Booking Page ###
 ################################
-# Dummy data for user bookings
-def get_user_bookings():
-    return [
-        {"id": 1, "title": "Beach Adventure", "description": "A relaxing beach trip.", "date": "2025-04-10", "tags": ["Beach", "Relaxing", "Sunset"], "price": "$499"},
-        {"id": 2, "title": "Mountain Hike", "description": "A thrilling hike up the mountains.", "date": "2025-05-15", "tags": ["Hiking", "Adventure", "Nature"], "price": "$599"}
-    ]
 
 def Tags(cats): return DivLAligned(map(Label, cats))
+
+def get_user_bookings():
+    """ Fetch user bookings from the bookings.json file. """
+    with open('bookings.json', 'r') as f:
+        return json.load(f)
 
 @rt("/booking")
 def booking():
     """ Booking Page """
-    bookings = get_user_bookings()  # Fetch user bookings from dummy data
+    bookings = get_user_bookings()  # Fetch user bookings from JSON data
     
     booking_cards = [
         Card(
             DivLAligned(
                 A(Img(src="https://picsum.photos/200/200?random={}".format(booking["id"]), style="width:200px"), href="#"),
                 Div(cls='space-y-3 uk-width-expand')(
-                    H4(booking["title"]),
-                    P(booking["description"]),
-                    P(Strong(booking["price"], cls=TextT.sm)),
-                    DivFullySpaced(map(Small, ["Traveler", booking['date']]), cls=TextT.muted),
+                    H4(booking["guest_name"]),
+                    P(f"Room Number: {booking['room_number']}"),
+                    P(f"Check-in: {booking['check_in_date']}"),
+                    P(f"Check-out: {booking['check_out_date']}"),
+                    P(f"Guests: {booking['number_of_guests']}"),
+                    P(Strong(f"${booking['total_price']:.2f}"), cls=TextT.sm),
+                    P(f"Status: {booking['status']}", cls=TextT.muted),
                     DivFullySpaced(
-                        Tags(booking["tags"]),
+                        Tags([booking["payment_method"]] + 
+                             ([booking.get("reference_number", "N/A")] if booking["payment_method"] == "eCash" else [])),
                         Button("View Details", cls=(ButtonT.primary, 'h-6'), on_click=f"/booking/{booking['id']}")
                     )
                 )
@@ -154,16 +200,18 @@ def booking():
     ]
     
     return Container(
-        NavBar(
-            A("Explore", href="/"),
-            A("Booking", href="/booking"),
-            A("Profile", href="/profile"),
-            Button("Logout",    cls=ButtonT.destructive)
+        reusable_navbar(),  # Reusable NavBar
+        DivCentered(
+            H1("Booking Page", cls="text-center text-4xl font-extrabold text-gray-900 bg-gradient-to-r from-[#FF5733] to-[#FFC0CB] text-white py-4 px-8 rounded-xl shadow-lg tracking-wide mb-6")
         ),
-        DivCentered(H1("Booking Page"), P("Here you can manage your trip bookings.")),
-        Div(*booking_cards)  # Display booking cards
+        DivCentered(
+            P("Here you can manage your trip bookings.", cls="mb-6")  # Added bottom margin for space
+        ),
+        Div(
+            *booking_cards,  # Display booking cards
+            cls="mt-6"  # Margin top for spacing between paragraph and cards
+        )
     )
-
 
 
 ################################
@@ -173,12 +221,16 @@ def booking():
 @rt("/profile")
 def profile():
     """ Profile Page """
-    sidebar = NavContainer(
-        Li(A("Profile")),
-        uk_switcher="connect: #component-nav; animation: uk-animation-fade",
-        cls=(NavT.secondary, "space-y-4 p-4 w-1/5"))
+    # Load user data from profile.json
+    try:
+        with open('profile.json', 'r') as f:
+            user_data = json.load(f)
+    except Exception as e:
+        # Raise an error if profile.json can't be loaded or is missing
+        raise FileNotFoundError("The profile.json file could not be loaded. Please check the file.")
 
-    def FormSectionDiv(*c, cls='space-y-2', **kwargs): return Div(*c, cls=cls, **kwargs)
+    def FormSectionDiv(*c, cls='space-y-2', **kwargs): 
+        return Div(*c, cls=cls, **kwargs)
 
     def FormLayout(title, subtitle, *content, cls='space-y-3 mt-4'):
         return Container(Div(H3(title), Subtitle(subtitle, cls="text-primary"), DividerLine(), Form(*content, cls=cls)))
@@ -186,34 +238,30 @@ def profile():
     def profile_form():
         content = (
             FormSectionDiv(
-                LabelInput("Username", placeholder='sveltecult', id='username'),
-                P("This is your public display name. You can change it once every 30 days.", cls="text-primary")),
+                LabelInput("Username", placeholder='sveltecult', id='username', value=user_data['fullName']),
+                P("This is your public display name.", cls="text-primary")),
             FormSectionDiv(
-                LabelTextArea("Bio", id="bio", placeholder="Tell us about yourself"),
-                P("You can @mention other users and organizations.", cls="text-primary")),
+                FormLabel("Email"),
+                Input(value=user_data['email'], readonly=True),  # Display email as read-only
+                P("This is your registered email address.", cls="text-primary")),
             FormSectionDiv(
-                FormLabel("URLs"),
-                P("Add links to your website or social media profiles.", cls="text-primary"),
-                Input(value="https://example.com"),
-                Button("Add URL")),
-            Button('Update profile', cls=ButtonT.primary))
+                FormLabel("Profile Picture"),
+                Img(src=user_data['profilePicture'], cls="w-24 h-24 rounded-full"),  # Display profile picture
+                P("This profile picture is fetched from your Google account.", cls="text-primary"))
+        )
         
         return FormLayout('Profile', 'This is how others will see you.', *content)
 
+    # Return the container without sidebar
     return Container(
-        NavBar(
-            A("Explore", href="/"),
-            A("Booking", href="/booking"),
-            A("Profile", href="/profile"),
-            Button("Logout",    cls=ButtonT.destructive)
-        ),
-        Div(cls="flex gap-x-12")(
-            sidebar,
-            Ul(id="component-nav", cls="uk-switcher max-w-2xl")(
-                Li(cls="uk-active")(profile_form())
-            )
+        reusable_navbar(),  # Reusable NavBar
+        DivCentered(  # Center content
+            profile_form()
         )
     )
+
+
+
 
 # Run the app
 serve()
